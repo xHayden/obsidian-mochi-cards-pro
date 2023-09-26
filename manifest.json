@@ -1,11 +1,10 @@
 {
-	"id": "obsidian-sample-plugin",
-	"name": "Sample Plugin",
+	"id": "obsidian-mochi-cards-pro",
+	"name": "Mochi Cards Pro",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "This is a sample plugin for Obsidian. This plugin demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "This plugin allows for card creation for mochi.cards using the mochi.cards API provided with the Pro subscription tier.",
+	"author": "Hayden Carpenter",
+	"authorUrl": "https://hayden.gg",
 	"isDesktopOnly": false
 }
