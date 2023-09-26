@@ -1,14 +1,54 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, MarkdownRenderer, MarkdownRenderChild, SuggestModal } from 'obsidian';
+import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, SuggestModal } from 'obsidian';
 import { encode } from 'base-64';
 
 // Remember to rename these classes and interfaces!
 
 interface MyPluginSettings {
 	mochiApiKey: string;
+	template: string;
 }
 
+interface MochiDeck {
+	id: string
+	name: string
+	sort: number
+	"parent-id": string
+	"template-id"?: string
+	"card-width"?: number
+}
+
+interface MochiTemplate {
+	id: string
+	name: string
+	content: string
+	pos: string
+	fields: MochiFields
+}
+
+interface MochiFields {
+	name: MochiNameField
+	[key: string]: MochiField;
+}
+
+type MochiNameField = MochiField & {
+	id: "name";
+  } & ({ value: string } | { name: string });
+
+interface MochiField {
+	id: string
+	name: string
+	pos: string;
+	content: string
+	options?: MochiFieldOptions;
+}
+
+interface MochiFieldOptions {
+	"multi-line?": boolean;
+  }
+
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	mochiApiKey: ''
+	mochiApiKey: '',
+	template: ''
 }
 
 class MochiAPI {
@@ -32,22 +72,30 @@ class MochiAPI {
 		});
 	}
 
-	createCard(name: string, content: string, deckId: string) {
-		const card = {
+	createCard(name: string, content: string, deckId: string, template: MochiTemplate | undefined) {
+		if (!template) {
+			throw new Error("Template does not exist!");
+		}
+		const card: any = {
 			"content": "test",
 			"deck-id": deckId,
-			"template-id": "cpyLWrBm",
+			"template-id": template.id,
 			"fields": {
 				"name": { 
 					"id": "name",
 					"value": name
 				},
-				"V72yjxYh": {
-					"id": "V72yjxYh",
-					"value": content
-				}
 			}
 		}
+		const firstFieldName = Object.keys(template.fields).find((field) => field != "name");
+		if (!firstFieldName) {
+			throw new Error("Template invalid! Needs one field after name.");
+		}
+		card.fields[firstFieldName] = {
+			"id": firstFieldName,
+			"value": content
+		}
+		console.log(card);
 		fetch(`${this.baseURL}/cards`, { method: 'POST', headers: this.headers, body: JSON.stringify(card)}).then((response: Response) => {
 			response.json().then((json: any) => {
 				console.log(json)
@@ -60,6 +108,12 @@ class MochiAPI {
 		const json = await res.json();
 		return json.docs;
 	}
+
+	async getTemplates(): Promise<MochiTemplate[]> {
+		const res: Response = await fetch(`${this.baseURL}/templates`, { method: 'GET', headers: this.headers });
+		const json = await res.json();
+		return json.docs;
+	}
 }
 
 export default class MochiPlugin extends Plugin {
@@ -67,42 +121,48 @@ export default class MochiPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		const mochi = new MochiAPI(this.settings.mochiApiKey);
-		// 
 
-		// // This creates an icon in the left ribbon.
-		// const ribbonIconEl = this.addRibbonIcon('copy-plus', 'Sample Plugin', (evt: MouseEvent) => {
-		// 	// Called when the user clicks the icon.
-		// 	new Notice('Under Construction');
-		// });
-		// // Perform additional things with the ribbon
-		// ribbonIconEl.addClass('my-plugin-ribbon-class');
+		const templates = await mochi.getTemplates();
+		const data = await this.loadData();
+		data.templates = templates;
+		await this.saveData(data)
 
-		// this.registerMarkdownCodeBlockProcessor("mochi", (source, el, ctx) => {
-		// 	const mochiBody = el.createDiv();
-		// 	const mochiContent = mochiBody.createSpan(source);
-		// 	ctx.addChild(mochiBody);
+		if (!this.settings.mochiApiKey) {
+			new Notice("Please provide an API key in the Plugin Settings to use Mochi Cards Pro");
+		}
 
-		// 	console.log(source, el, ctx);
-		// });
-
-		// class MochiRenderer extends MarkdownRenderChild {
-		// 	constructor(el: HTMLElement, src: string) {
-		// 		super(el);
-		// 	}
-
-		// 	onload() {
-				
-		// 	}
-		// }
+		this.addCommand({
+			id: 'select-template-mochi',
+			name: 'Select Card Template',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
+					this.settings.template = id;
+					data.template = id;
+					this.saveData(data)
+				}).open();
+			}
+		})
 
 		this.addCommand({
 			id: 'export-card-from-text',
-			name: 'Export Mochi Cards from Text',
+			name: 'Export Cards from Text',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				let selection = editor.getSelection();
+				if (!templates || !this.settings.template || this.settings.template == '') {
+					new Notice('No template selected.');
+					new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
+						this.settings.template = id;
+						data.template = id;
+						this.saveData(data)
+					}).open();
+					return;
+				}
 				mochi.getDecks().then(decks => {
 					new SelectDeckModal(this.app, decks, this.loadData, this.saveData, (id: string) => {
-						while (selection.contains("\n# ")) {
+						let counter = 0;
+						console.log(selection);
+						while (selection.contains("\n# ") || selection.at(0) == "#") {
+							counter++;
 							const frontStart = selection.indexOf("#");
 							selection = selection.substring(frontStart + 1).trim();
 							const newLineIndex = selection.indexOf("\n");
@@ -112,13 +172,9 @@ export default class MochiPlugin extends Plugin {
 								selection = content.substring(content.indexOf("\n# "));
 								content = content.substring(0, content.indexOf("\n#"));
 							}
-							mochi.createCard(name, content, id);
-							
+							mochi.createCard(name, content, id, templates.find(temp => temp.id == this.settings.template));
 						}
-						// editor.replaceSelection(
-						// 	`\`\`\`mochi\n${selection}\n\`\`\`\n`
-						// )
-						// const test = view.containerEl.createEl("div", { text: "Test" });
+						new Notice(`Created ${counter} cards`);
 					}).open();
 				})
 			}
@@ -150,13 +206,38 @@ export default class MochiPlugin extends Plugin {
 	}
 }
 
-type MochiDeck = {
-	id: string
-	name: string
-	sort: number
-	"parent-id": string
-	"template-id"?: string
-	"card-width"?: number
+class SelectTemplateModal extends SuggestModal<MochiTemplate> {
+	templates: MochiTemplate[]
+	saveData: any
+	loadData: any
+	callback: any
+
+	constructor(app: any, templates: MochiTemplate[], loadData: any, saveData: any, callback: any) {
+		super(app);	
+		this.templates = templates;
+		this.saveData = saveData;
+		this.loadData = loadData;
+		this.callback = callback;
+	}
+
+	getSuggestions(query: string): MochiTemplate[] {
+		return this.templates.filter((template: MochiTemplate) => {
+			return template.name.toLowerCase().includes(query.toLowerCase());
+		})
+	}
+
+	renderSuggestion(template: MochiTemplate, el: HTMLElement) {
+		el.createEl("div", { text: template.name });
+		el.createEl("small", { text: template.id });
+	}
+
+	async onChooseSuggestion(template: MochiTemplate, evt: MouseEvent | KeyboardEvent) {
+		new Notice(`Selected ${template.id}`);
+		this.callback(template.id);
+		const data = await this.loadData();
+		data.template = template.id;
+		await this.saveData(data);
+	}	
 }
 
 class SelectDeckModal extends SuggestModal<MochiDeck> {
