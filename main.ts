@@ -51,6 +51,13 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 	template: ''
 }
 
+interface MochiCard extends MochiTemplate {
+	references?: any[]
+	reviews?: any[]
+	"created-at": Date
+	tags?: any[]
+}
+
 class MochiAPI {
 	baseURL: string
 	apiKey: string
@@ -64,10 +71,40 @@ class MochiAPI {
 		this.headers.set('Content-Type', 'application/json');
 	}
 
-	getCards(id: string) {
-		fetch(`${this.baseURL}/cards/`, { method: 'GET', headers: this.headers }).then((response: Response) => {
+	getCards(deckId: string, callback: any) {
+		fetch(`${this.baseURL}/cards/?deck-id=${deckId}`, { method: 'GET', headers: this.headers }).then((response: Response) => {
+			response.json().then((data: any) => {
+				callback(data.docs.filter((card: any) => !card["trashed?"]));
+			})
+		});
+	}
+
+	updateCard(cardId: string, name: string, content: string, deckId: string, template: MochiTemplate | undefined) {
+		if (!template) {
+			throw new Error("Template does not exist!");
+		}
+		const card: any = {
+			"content": "test",
+			"deck-id": deckId,
+			"template-id": template.id,
+			"fields": {
+				"name": { 
+					"id": "name",
+					"value": name
+				},
+			}
+		}
+		const firstFieldName = Object.keys(template.fields).find((field) => field != "name");
+		if (!firstFieldName) {
+			throw new Error("Template invalid! Needs one field after name.");
+		}
+		card.fields[firstFieldName] = {
+			"id": firstFieldName,
+			"value": content
+		}
+		fetch(`${this.baseURL}/cards/${cardId}`, { method: 'POST', headers: this.headers, body: JSON.stringify(card)}).then((response: Response) => {
 			response.json().then((json: any) => {
-				console.log(json)
+				console.log(`update card ${cardId}`, json)
 			})
 		});
 	}
@@ -95,10 +132,9 @@ class MochiAPI {
 			"id": firstFieldName,
 			"value": content
 		}
-		console.log(card);
 		fetch(`${this.baseURL}/cards`, { method: 'POST', headers: this.headers, body: JSON.stringify(card)}).then((response: Response) => {
 			response.json().then((json: any) => {
-				console.log(json)
+				console.log(`create card ${name}`, json)
 			})
 		});
 	}
@@ -158,23 +194,32 @@ export default class MochiPlugin extends Plugin {
 					return;
 				}
 				mochi.getDecks().then(decks => {
-					new SelectDeckModal(this.app, decks, this.loadData, this.saveData, (id: string) => {
-						let counter = 0;
-						console.log(selection);
-						while (selection.contains("\n# ") || selection.at(0) == "#") {
-							counter++;
-							const frontStart = selection.indexOf("#");
-							selection = selection.substring(frontStart + 1).trim();
-							const newLineIndex = selection.indexOf("\n");
-							const name = selection.substring(0, newLineIndex);
-							let content = selection.substring(newLineIndex + 1).trim();
-							if (content.contains("\n# ")) {
-								selection = content.substring(content.indexOf("\n# "));
-								content = content.substring(0, content.indexOf("\n#"));
+					new SelectDeckModal(this.app, decks, this.loadData, this.saveData, (deckId: string) => {
+						mochi.getCards(deckId, (cards: MochiCard[]) => {
+							let counter = 0;
+							console.log(selection);
+							while (selection.contains("\n# ") || selection.at(0) == "#") {
+								counter++;
+								const frontStart = selection.indexOf("#");
+								selection = selection.substring(frontStart + 1).trim();
+								const newLineIndex = selection.indexOf("\n");
+								const name = selection.substring(0, newLineIndex);
+								let content = selection.substring(newLineIndex + 1).trim();
+								if (content.contains("\n# ")) {
+									selection = content.substring(content.indexOf("\n# "));
+									content = content.substring(0, content.indexOf("\n#"));
+								}
+								const updateCard = cards.find(card => card.name == name);
+								if (updateCard) {
+									mochi.updateCard(updateCard.id, name, content, deckId, templates.find(temp => temp.id == this.settings.template));
+									new Notice(`Modified: ${name}`);
+								} else {
+									mochi.createCard(name, content, deckId, templates.find(temp => temp.id == this.settings.template));
+									new Notice(`Created new card: ${name}`);
+								}
 							}
-							mochi.createCard(name, content, id, templates.find(temp => temp.id == this.settings.template));
-						}
-						new Notice(`Created ${counter} cards`);
+							new Notice(`Modified/created ${counter} cards`);
+						})
 					}).open();
 				})
 			}
