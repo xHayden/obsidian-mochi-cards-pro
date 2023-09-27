@@ -56,6 +56,7 @@ interface MochiCard extends MochiTemplate {
 	reviews?: any[]
 	"created-at": Date
 	tags?: any[]
+	"trashed?": any
 }
 
 class MochiAPI {
@@ -71,12 +72,26 @@ class MochiAPI {
 		this.headers.set('Content-Type', 'application/json');
 	}
 
-	getCards(deckId: string, callback: any) {
-		fetch(`${this.baseURL}/cards/?deck-id=${deckId}`, { method: 'GET', headers: this.headers }).then((response: Response) => {
-			response.json().then((data: any) => {
-				callback(data.docs.filter((card: any) => !card["trashed?"]));
-			})
-		});
+	async getCards(deckId: string, bookmark: string | undefined = undefined, allCards: MochiCard[] = []): Promise<MochiCard[]> {
+		let url = `${this.baseURL}/cards/?deck-id=${deckId}&limit=100`;
+		if (bookmark) {
+			url += `&bookmark=${bookmark}`;
+		}
+
+		const response = await fetch(url, { method: 'GET', headers: this.headers });
+		const data: any = await response.json();
+		allCards.push(...data.docs.filter((card: MochiCard) => !card["trashed?"]));
+		// If a bookmark is returned, there are more cards to fetch
+		if (data.bookmark == "nil") {
+			console.warn(`Deck ${deckId} does not exist or has no data`);
+		}
+		if (data.bookmark && data.bookmark !== "nil" && bookmark !== data.bookmark) {
+			// Recursive call to fetch more cards
+			return await this.getCards(deckId, data.bookmark, allCards);
+		}
+
+		return allCards;
+
 	}
 
 	updateCard(cardId: string, name: string, content: string, deckId: string, template: MochiTemplate | undefined) {
@@ -84,7 +99,7 @@ class MochiAPI {
 			throw new Error("Template does not exist!");
 		}
 		const card: any = {
-			"content": "test",
+			"content": content,
 			"deck-id": deckId,
 			"template-id": template.id,
 			"fields": {
@@ -142,13 +157,13 @@ class MochiAPI {
 	async getDecks(): Promise<MochiDeck[]> {
 		const res: Response = await fetch(`${this.baseURL}/decks`, { method: 'GET', headers: this.headers });
 		const json = await res.json();
-		return json.docs;
+		return json.docs.filter((deck: any) => !deck["trashed?"] && !deck["archived?"]);
 	}
 
 	async getTemplates(): Promise<MochiTemplate[]> {
 		const res: Response = await fetch(`${this.baseURL}/templates`, { method: 'GET', headers: this.headers });
 		const json = await res.json();
-		return json.docs;
+		return json.docs.filter((template: any) => !template["trashed?"] && !template["archived?"]);
 	}
 }
 
@@ -183,45 +198,53 @@ export default class MochiPlugin extends Plugin {
 			id: 'export-card-from-text',
 			name: 'Export Cards from Text',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				let selection = editor.getSelection();
-				if (!templates || !this.settings.template || this.settings.template == '') {
-					new Notice('No template selected.');
-					new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
-						this.settings.template = id;
-						data.template = id;
-						this.saveData(data)
-					}).open();
-					return;
+				try {
+					let selection = editor.getSelection();
+					if (!templates || !this.settings.template || this.settings.template == '') {
+						new Notice('No template selected.');
+						new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
+							this.settings.template = id;
+							data.template = id;
+							this.saveData(data)
+						}).open();
+						return;
+					}
+					mochi.getDecks().then(decks => {
+						new SelectDeckModal(this.app, decks, this.loadData, this.saveData, (deckId: string) => {
+							mochi.getCards(deckId).then((cards: MochiCard[]) => {
+								let cardCounter = 0;
+								let modifiedCounter = 0;
+								console.log(selection);
+								while (selection.contains("\n# ") || selection.at(0) == "#") {
+									cardCounter++;
+									const frontStart = selection.indexOf("#");
+									selection = selection.substring(frontStart + 1).trim();
+									const newLineIndex = selection.indexOf("\n");
+									const name = selection.substring(0, newLineIndex).trim();
+									let content = selection.substring(newLineIndex + 1).trim();
+									if (content.contains("\n# ")) {
+										selection = content.substring(content.indexOf("\n# "));
+										content = content.substring(0, content.indexOf("\n#"));
+									}
+									
+									const updateCard = cards.find(card => card.name.toLowerCase().trim() == name.toLowerCase());
+									if (updateCard && (content !== updateCard.content || name !== updateCard.name)) {
+										mochi.updateCard(updateCard.id, name, content, deckId, templates.find(temp => temp.id == this.settings.template));
+										new Notice(`Modified: ${name}`);
+										modifiedCounter++;
+									} else if (!updateCard) {
+										mochi.createCard(name, content, deckId, templates.find(temp => temp.id == this.settings.template));
+										new Notice(`Created new card: ${name}`);
+										modifiedCounter++;
+									}
+								}
+								new Notice(`Modified/created ${modifiedCounter} out of ${cardCounter} cards`);
+							})
+						}).open();
+					})
+				} catch (e) {
+					new Notice(e);
 				}
-				mochi.getDecks().then(decks => {
-					new SelectDeckModal(this.app, decks, this.loadData, this.saveData, (deckId: string) => {
-						mochi.getCards(deckId, (cards: MochiCard[]) => {
-							let counter = 0;
-							console.log(selection);
-							while (selection.contains("\n# ") || selection.at(0) == "#") {
-								counter++;
-								const frontStart = selection.indexOf("#");
-								selection = selection.substring(frontStart + 1).trim();
-								const newLineIndex = selection.indexOf("\n");
-								const name = selection.substring(0, newLineIndex);
-								let content = selection.substring(newLineIndex + 1).trim();
-								if (content.contains("\n# ")) {
-									selection = content.substring(content.indexOf("\n# "));
-									content = content.substring(0, content.indexOf("\n#"));
-								}
-								const updateCard = cards.find(card => card.name == name);
-								if (updateCard) {
-									mochi.updateCard(updateCard.id, name, content, deckId, templates.find(temp => temp.id == this.settings.template));
-									new Notice(`Modified: ${name}`);
-								} else {
-									mochi.createCard(name, content, deckId, templates.find(temp => temp.id == this.settings.template));
-									new Notice(`Created new card: ${name}`);
-								}
-							}
-							new Notice(`Modified/created ${counter} cards`);
-						})
-					}).open();
-				})
 			}
 		});
 
