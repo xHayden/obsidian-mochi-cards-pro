@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-mochi-cards-pro",
 	"name": "Mochi Cards Pro",
-	"version": "1.0.0",
+	"version": "0.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "This plugin allows for card creation for mochi.cards using the mochi.cards API provided with the Pro subscription tier.",
 	"author": "Hayden Carpenter",
