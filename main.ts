@@ -73,24 +73,30 @@ class MochiAPI {
 	}
 
 	async getCards(deckId: string, bookmark: string | undefined = undefined, allCards: MochiCard[] = []): Promise<MochiCard[]> {
-		let url = `${this.baseURL}/cards/?deck-id=${deckId}&limit=100`;
-		if (bookmark) {
-			url += `&bookmark=${bookmark}`;
+		try {
+			let url = `${this.baseURL}/cards/?deck-id=${deckId}&limit=100`;
+			if (bookmark) {
+				url += `&bookmark=${bookmark}`;
+			}
+	
+			const response = await fetch(url, { method: 'GET', headers: this.headers });
+			const data: any = await response.json();
+			allCards.push(...data.docs.filter((card: MochiCard) => !card["trashed?"]));
+			// If a bookmark is returned, there are more cards to fetch
+			if (data.bookmark == "nil") {
+				console.warn(`Deck ${deckId} does not exist or has no data`);
+			}
+			if (data.bookmark && data.bookmark !== "nil" && bookmark !== data.bookmark) {
+				// Recursive call to fetch more cards
+				return await this.getCards(deckId, data.bookmark, allCards);
+			}
+	
+			return allCards;
 		}
-
-		const response = await fetch(url, { method: 'GET', headers: this.headers });
-		const data: any = await response.json();
-		allCards.push(...data.docs.filter((card: MochiCard) => !card["trashed?"]));
-		// If a bookmark is returned, there are more cards to fetch
-		if (data.bookmark == "nil") {
-			console.warn(`Deck ${deckId} does not exist or has no data`);
+		catch (e) {
+			console.log(e)
+			return [];
 		}
-		if (data.bookmark && data.bookmark !== "nil" && bookmark !== data.bookmark) {
-			// Recursive call to fetch more cards
-			return await this.getCards(deckId, data.bookmark, allCards);
-		}
-
-		return allCards;
 
 	}
 
@@ -155,15 +161,25 @@ class MochiAPI {
 	}
 
 	async getDecks(): Promise<MochiDeck[]> {
-		const res: Response = await fetch(`${this.baseURL}/decks`, { method: 'GET', headers: this.headers });
-		const json = await res.json();
-		return json.docs.filter((deck: any) => !deck["trashed?"] && !deck["archived?"]);
+		try {
+			const res: Response = await fetch(`${this.baseURL}/decks`, { method: 'GET', headers: this.headers });
+			const json = await res.json();
+			return json.docs.filter((deck: any) => !deck["trashed?"] && !deck["archived?"]);
+		} catch (e) {
+			console.log(e);
+			return [];
+		}
 	}
 
 	async getTemplates(): Promise<MochiTemplate[]> {
-		const res: Response = await fetch(`${this.baseURL}/templates`, { method: 'GET', headers: this.headers });
-		const json = await res.json();
-		return json.docs.filter((template: any) => !template["trashed?"] && !template["archived?"]);
+		try {
+			const res: Response = await fetch(`${this.baseURL}/templates`, { method: 'GET', headers: this.headers });
+			const json = await res.json();
+			return json.docs.filter((template: any) => !template["trashed?"] && !template["archived?"]);
+		} catch (e) {
+			console.log(e);
+			return [];
+		}
 	}
 }
 
