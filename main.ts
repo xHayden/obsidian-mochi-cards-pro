@@ -187,16 +187,15 @@ export default class MochiPlugin extends Plugin {
 	settings: MyPluginSettings;
 	async onload() {
 		await this.loadSettings();
+		if (!this.settings.mochiApiKey) {
+			new Notice("Please provide an API key in the Plugin Settings to use Mochi Cards Pro");
+			return;
+		}
 		const mochi = new MochiAPI(this.settings.mochiApiKey);
-
 		const templates = await mochi.getTemplates();
 		const data = await this.loadData();
 		data.templates = templates;
 		await this.saveData(data)
-
-		if (!this.settings.mochiApiKey) {
-			new Notice("Please provide an API key in the Plugin Settings to use Mochi Cards Pro");
-		}
 
 		this.addCommand({
 			id: 'select-template-mochi',
