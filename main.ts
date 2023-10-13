@@ -189,88 +189,82 @@ export default class MochiPlugin extends Plugin {
 		await this.loadSettings();
 		if (!this.settings.mochiApiKey) {
 			new Notice("Please provide an API key in the Plugin Settings to use Mochi Cards Pro");
-			return;
-		}
-		const mochi = new MochiAPI(this.settings.mochiApiKey);
-		const templates = await mochi.getTemplates();
-		const data = await this.loadData();
-		data.templates = templates;
-		await this.saveData(data)
+		} else {
+			const mochi = new MochiAPI(this.settings.mochiApiKey);
+			const templates = await mochi.getTemplates();
+			const data = await this.loadData();
+			data.templates = templates;
+			await this.saveData(data)
 
-		this.addCommand({
-			id: 'select-template-mochi',
-			name: 'Select Card Template',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
-					this.settings.template = id;
-					data.template = id;
-					this.saveData(data)
-				}).open();
-			}
-		})
-
-		this.addCommand({
-			id: 'export-card-from-text',
-			name: 'Export Cards from Text',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				try {
-					let selection = editor.getSelection();
-					if (!templates || !this.settings.template || this.settings.template == '') {
-						new Notice('No template selected.');
-						new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
-							this.settings.template = id;
-							data.template = id;
-							this.saveData(data)
-						}).open();
-						return;
-					}
-					mochi.getDecks().then(decks => {
-						new SelectDeckModal(this.app, decks, this.loadData, this.saveData, (deckId: string) => {
-							mochi.getCards(deckId).then((cards: MochiCard[]) => {
-								let cardCounter = 0;
-								let modifiedCounter = 0;
-								console.log(selection);
-								while (selection.contains("\n# ") || selection.at(0) == "#") {
-									cardCounter++;
-									const frontStart = selection.indexOf("#");
-									selection = selection.substring(frontStart + 1).trim();
-									const newLineIndex = selection.indexOf("\n");
-									const name = selection.substring(0, newLineIndex).trim();
-									let content = selection.substring(newLineIndex + 1).trim();
-									if (content.contains("\n# ")) {
-										selection = content.substring(content.indexOf("\n# "));
-										content = content.substring(0, content.indexOf("\n#"));
-									}
-									
-									const updateCard = cards.find(card => card.name.toLowerCase().trim() == name.toLowerCase());
-									if (updateCard && (content !== updateCard.content || name !== updateCard.name)) {
-										mochi.updateCard(updateCard.id, name, content, deckId, templates.find(temp => temp.id == this.settings.template));
-										new Notice(`Modified: ${name}`);
-										modifiedCounter++;
-									} else if (!updateCard) {
-										mochi.createCard(name, content, deckId, templates.find(temp => temp.id == this.settings.template));
-										new Notice(`Created new card: ${name}`);
-										modifiedCounter++;
-									}
-								}
-								new Notice(`Modified/created ${modifiedCounter} out of ${cardCounter} cards`);
-							})
-						}).open();
-					})
-				} catch (e) {
-					new Notice(e);
+			this.addCommand({
+				id: 'select-template-mochi',
+				name: 'Select Card Template',
+				editorCallback: (editor: Editor, view: MarkdownView) => {
+					new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
+						this.settings.template = id;
+						data.template = id;
+						this.saveData(data)
+					}).open();
 				}
-			}
-		});
+			})
+
+			this.addCommand({
+				id: 'export-card-from-text',
+				name: 'Export Cards from Text',
+				editorCallback: (editor: Editor, view: MarkdownView) => {
+					try {
+						let selection = editor.getSelection();
+						if (!templates || !this.settings.template || this.settings.template == '') {
+							new Notice('No template selected.');
+							new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
+								this.settings.template = id;
+								data.template = id;
+								this.saveData(data)
+							}).open();
+							return;
+						}
+						mochi.getDecks().then(decks => {
+							new SelectDeckModal(this.app, decks, this.loadData, this.saveData, (deckId: string) => {
+								mochi.getCards(deckId).then((cards: MochiCard[]) => {
+									let cardCounter = 0;
+									let modifiedCounter = 0;
+									console.log(selection);
+									while (selection.contains("\n# ") || selection.at(0) == "#") {
+										cardCounter++;
+										const frontStart = selection.indexOf("#");
+										selection = selection.substring(frontStart + 1).trim();
+										const newLineIndex = selection.indexOf("\n");
+										const name = selection.substring(0, newLineIndex).trim();
+										let content = selection.substring(newLineIndex + 1).trim();
+										if (content.contains("\n# ")) {
+											selection = content.substring(content.indexOf("\n# "));
+											content = content.substring(0, content.indexOf("\n#"));
+										}
+										
+										const updateCard = cards.find(card => card.name.toLowerCase().trim() == name.toLowerCase());
+										if (updateCard && (content !== updateCard.content || name !== updateCard.name)) {
+											mochi.updateCard(updateCard.id, name, content, deckId, templates.find(temp => temp.id == this.settings.template));
+											new Notice(`Modified: ${name}`);
+											modifiedCounter++;
+										} else if (!updateCard) {
+											mochi.createCard(name, content, deckId, templates.find(temp => temp.id == this.settings.template));
+											new Notice(`Created new card: ${name}`);
+											modifiedCounter++;
+										}
+									}
+									new Notice(`Modified/created ${modifiedCounter} out of ${cardCounter} cards`);
+								})
+							}).open();
+						})
+					} catch (e) {
+						new Notice(e);
+					}
+				}
+			});
+		}
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new SettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
 
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
 		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
@@ -371,7 +365,7 @@ class SettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: 'Mochi Card Creator Settings'});
+		// containerEl.createEl('h2', {text: 'Mochi Card Creator Settings'});
 
 		new Setting(containerEl)
 			.setName('Mochi API Key')
