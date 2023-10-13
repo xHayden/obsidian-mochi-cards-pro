@@ -2,7 +2,7 @@
 
 This is a lightweight obsidian plugin that allows me to create flashcards quickly with Mochi using the premium API it supplies. It will only work if you have Mochi pro.
 
-To start, provide your API key in the plugin settings.
+__You must have Mochi Pro for this plugin to work and provide your API key in the plugin settings__.
 
 The only Mochi Templates that work have to start in this format:
 ```
@@ -32,3 +32,6 @@ There's a buffer where you can go back and recover what was heard in the other e
 ```
 
 To export, simply select the cards you want to export, use CMD+P to open the command picker, and chose "Export Card from Text". Follow the prompts.
+
+## Demo
+![Demo](https://img.hayden.gg/7dee8e8af29674e3a05273917223354f.gif)
