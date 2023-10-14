@@ -186,7 +186,7 @@ export default class MochiPlugin extends Plugin {
 	settings: MyPluginSettings;
 	async onload() {
 		await this.loadSettings();
-		
+
 		if (!this.settings.mochiApiKey) {
 			new Notice("Please provide an API key in the Plugin Settings to use Mochi Cards Pro");
 		} else {
@@ -227,7 +227,7 @@ export default class MochiPlugin extends Plugin {
 			id: 'select-template-mochi',
 			name: 'Select Card Template',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
+				new SelectTemplateModal(this, templates, (id: string) => {
 					this.settings.template = id;
 					data.template = id;
 					this.saveData(data)
@@ -243,7 +243,7 @@ export default class MochiPlugin extends Plugin {
 					let selection = editor.getSelection();
 					if (!templates || !this.settings.template || this.settings.template == '') {
 						new Notice('No template selected.');
-						new SelectTemplateModal(this.app, templates, this.loadData, this.saveData, (id: string) => {
+						new SelectTemplateModal(this, templates, (id: string) => {
 							this.settings.template = id;
 							data.template = id;
 							this.saveData(data)
@@ -251,7 +251,7 @@ export default class MochiPlugin extends Plugin {
 						return;
 					}
 					mochi.getDecks().then(decks => {
-						new SelectDeckModal(this.app, decks, this.loadData, this.saveData, (deckId: string) => {
+						new SelectDeckModal(this, decks, (deckId: string) => {
 							mochi.getCards(deckId).then((cards: MochiCard[]) => {
 								let cardCounter = 0;
 								let modifiedCounter = 0;
@@ -293,15 +293,13 @@ export default class MochiPlugin extends Plugin {
 
 class SelectTemplateModal extends SuggestModal<MochiTemplate> {
 	templates: MochiTemplate[]
-	saveData: any
-	loadData: any
+	plugin: Plugin
 	callback: any
 
-	constructor(app: any, templates: MochiTemplate[], loadData: any, saveData: any, callback: any) {
-		super(app);	
+	constructor(plugin: Plugin, templates: MochiTemplate[], callback: any) {
+		super(plugin.app);	
 		this.templates = templates;
-		this.saveData = saveData;
-		this.loadData = loadData;
+		this.plugin = plugin;
 		this.callback = callback;
 	}
 
@@ -319,23 +317,21 @@ class SelectTemplateModal extends SuggestModal<MochiTemplate> {
 	async onChooseSuggestion(template: MochiTemplate, evt: MouseEvent | KeyboardEvent) {
 		new Notice(`Selected ${template.id}`);
 		this.callback(template.id);
-		const data = await this.loadData();
+		const data = await this.plugin.loadData();
 		data.template = template.id;
-		await this.saveData(data);
+		await this.plugin.saveData(data);
 	}	
 }
 
 class SelectDeckModal extends SuggestModal<MochiDeck> {
+	plugin: Plugin
 	decks: MochiDeck[]
-	saveData: any
-	loadData: any
 	callback: any
 
-	constructor(app: any, decks: MochiDeck[], loadData: any, saveData: any, callback: any) {
-		super(app);
+	constructor(plugin: Plugin, decks: MochiDeck[], callback: any) {
+		super(plugin.app);
+		this.plugin = plugin;
 		this.decks = decks;
-		this.saveData = saveData;
-		this.loadData = loadData;
 		this.callback = callback;
 	}
 
@@ -354,9 +350,9 @@ class SelectDeckModal extends SuggestModal<MochiDeck> {
 	async onChooseSuggestion(deck: MochiDeck, evt: MouseEvent | KeyboardEvent) {
 		new Notice(`Selected ${deck.name}`);
 		this.callback(deck.id);
-		const data = await this.loadData();
+		const data = await this.plugin.loadData();
 		data.selectedDeck = deck;
-		await this.saveData(data);
+		await this.plugin.saveData(data);
 	}
 }
 
