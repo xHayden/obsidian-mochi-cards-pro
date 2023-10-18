@@ -19,6 +19,8 @@
     ]
   },
   "include": [
-    "**/*.ts"
+    "**/*.ts",
+    "**/*.d.ts",
+    "src/types/mochi-obsidian-types.d.ts"
   ]
 }
