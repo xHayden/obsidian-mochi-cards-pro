@@ -21,9 +21,6 @@ export default class MochiPlugin extends Plugin {
 		}
 
 		this.addSettingTab(new SettingTab(this.app, this));
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
 	onunload() {
@@ -76,8 +73,6 @@ class SettingTab extends PluginSettingTab {
 		const {containerEl} = this;
 
 		containerEl.empty();
-
-		// containerEl.createEl('h2', {text: 'Mochi Card Creator Settings'});
 
 		new Setting(containerEl)
 			.setName('Mochi API Key')
