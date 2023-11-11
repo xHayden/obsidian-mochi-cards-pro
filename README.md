@@ -33,5 +33,7 @@ There's a buffer where you can go back and recover what was heard in the other e
 
 To export, simply select the cards you want to export, use CMD+P to open the command picker, and chose "Export Card from Text". Follow the prompts.
 
+__To export cards, you have to highlight the cards you'd like to export.__
+
 ## Demo
 ![Demo](https://img.hayden.gg/7dee8e8af29674e3a05273917223354f.gif)
