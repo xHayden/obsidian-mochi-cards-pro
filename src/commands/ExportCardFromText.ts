@@ -4,16 +4,22 @@ import { MochiAPI } from "src/mochi";
 import { MochiCard, MochiTemplate } from "src/mochi/types";
 import { SelectDeckModal, SelectTemplateModal } from "src/modals";
 
-function getNextCardInfo(selection: string) {
-    const frontStart = selection.indexOf("#");
-    selection = selection.substring(frontStart + 1).trim();
+// Get card info from a text selection
+function getNextCardInfo(selection: string, delimiter = "#") {    
+    const frontStart = selection.indexOf(delimiter);
+    selection = selection.substring(frontStart + delimiter.length).trim();
+    // take only the string following the delimiter
+
     const newLineIndex = selection.indexOf("\n");
+    // find where the title of the card ends, indicated by a newline
+
     const name = selection.substring(0, newLineIndex).trim();
     let content = selection.substring(newLineIndex + 1).trim();
-    
-    if (content.contains("\n# ")) {
-        selection = content.substring(content.indexOf("\n# "));
-        content = content.substring(0, content.indexOf("\n#"));
+    // content after the name
+    if (content.contains(`\n${delimiter} `)) {
+        // if ends with a new delimiter at some point, make the content only the content up to the delimiter
+        selection = content.substring(content.indexOf(`\n${delimiter} `));
+        content = content.substring(0, content.indexOf(`\n${delimiter}`));
     }
     
     return { name, content, updatedSelection: selection };
@@ -32,7 +38,7 @@ function processCard(mochi: MochiAPI, cards: MochiCard[], name: string, content:
 }
 
 
-const ExportCardFromText = async (editor: Editor, view: MarkdownView, plugin: MochiPlugin, mochi: MochiAPI, templates: MochiTemplate[]) => {
+const ExportCardFromText = async (editor: Editor, view: MarkdownView, plugin: MochiPlugin, mochi: MochiAPI, templates: MochiTemplate[], delimiter = "#") => {
     try {
         let selection = editor.getSelection();
         if (!templates || !plugin.settings.template || plugin.settings.template == '') {
@@ -46,7 +52,7 @@ const ExportCardFromText = async (editor: Editor, view: MarkdownView, plugin: Mo
         
         const decks = await mochi.getDecks();
 
-        new SelectDeckModal(plugin, decks, async (deckId: string) => {
+        new SelectDeckModal(plugin, decks, mochi, async (deckId: string) => {
             const cards: MochiCard[] = await mochi.getCards(deckId);
             let cardCounter = 0;
             let modifiedCounter = 0;
@@ -60,9 +66,13 @@ const ExportCardFromText = async (editor: Editor, view: MarkdownView, plugin: Mo
                 Go along, scanning the selection to see what can be turned into a card. Markdown styles of Obsidian
                 and Mochi are inconsistent so probably will need revision.
             */
-            while (selection.includes("\n# ") || selection.charAt(0) === "#") {
+           
+                while (selection.includes(`\n${delimiter} `) || selection.trimStart().startsWith(delimiter)) {
+                // if we hit a new line with a delimiter, implying a new card, or the first character in our selection is a delimiter to qualify
+                // the case without the newline
+
                 cardCounter++;
-                const { name, content, updatedSelection } = getNextCardInfo(selection);
+                const { name, content, updatedSelection } = getNextCardInfo(selection, delimiter);
                 selection = updatedSelection;
 
                 if (processCard(mochi, cards, name, content, deckId, template)) {

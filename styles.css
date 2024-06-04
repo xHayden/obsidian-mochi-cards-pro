@@ -6,3 +6,16 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.card__path {
+    font-weight: 300;
+}
+
+.card__desc {
+    display: flex;
+    flex-direction: column;
+}
+
+.card__id {
+    font-weight: 100;
+}

@@ -12,6 +12,11 @@ export interface MochiDeck {
     "archived?"?: boolean;
 }
 
+export interface MochiParentDeck {
+    deck: MochiDeck,
+    parents?: MochiDeck[]
+}
+
 export type MochiDeckBuilder = Omit<MochiDeck, "id" | "trashed?" | "archived?">
 
 export interface MochiTemplate {

@@ -122,6 +122,17 @@ export class MochiAPI {
 		}
 	}
 
+	async getDeck(deckId: string): Promise<MochiDeck | undefined> {
+		try {
+			const res: RequestUrlResponse = await requestUrl({ url:`${this.baseURL}/decks/${deckId}`, method: 'GET', headers: this.headers });
+			const json = res.json;
+			return json
+		} catch (e) {
+			console.error(e);
+			return;
+		}
+	}
+
 	async getTemplates(): Promise<MochiTemplate[]> {
 		try {
 			const res: RequestUrlResponse = await requestUrl({ url: `${this.baseURL}/templates`, method: 'GET', headers: this.headers });
