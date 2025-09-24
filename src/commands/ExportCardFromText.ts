@@ -25,13 +25,13 @@ function getNextCardInfo(selection: string, delimiter = "#") {
     return { name, content, updatedSelection: selection };
 }
 
-function processCard(mochi: MochiAPI, cards: MochiCard[], name: string, content: string, deckId: string, template: MochiTemplate) {
+async function processCard(mochi: MochiAPI, cards: MochiCard[], name: string, content: string, deckId: string, template: MochiTemplate) {
     const updateCard = cards.find(card => card.name.toLowerCase().trim() == name.toLowerCase());
     if (updateCard && (content !== updateCard.content || name !== updateCard.name)) { // check if either the name or content has changed
-        mochi.updateCard(updateCard.id, name, content, deckId, template);
+        await mochi.updateCard(updateCard.id, name, content, deckId, template);
         return true;
     } else if (!updateCard) {
-        mochi.createCard(name, content, deckId, template); // if the card doesn't exist, create it
+        await mochi.createCard(name, content, deckId, template); // if the card doesn't exist, create it
         return true;
     }
     return false;
@@ -62,11 +62,28 @@ const ExportCardFromText = async (editor: Editor, view: MarkdownView, plugin: Mo
                 return;
             }
 
+            // Count total cards first for progress tracking
+            let tempSelection = selection;
+            let totalCards = 0;
+            while (tempSelection.includes(`\n${delimiter} `) || tempSelection.trimStart().startsWith(delimiter)) {
+                totalCards++;
+                const { updatedSelection } = getNextCardInfo(tempSelection, delimiter);
+                tempSelection = updatedSelection;
+            }
+
+            if (totalCards === 0) {
+                new Notice("No cards found to process");
+                return;
+            }
+
+            // Show initial loading notice
+            const loadingNotice = new Notice(`Processing 0/${totalCards} cards...`, 0); // 0 timeout keeps it visible
+
             /*
                 Go along, scanning the selection to see what can be turned into a card. Markdown styles of Obsidian
                 and Mochi are inconsistent so probably will need revision.
             */
-           
+
                 while (selection.includes(`\n${delimiter} `) || selection.trimStart().startsWith(delimiter)) {
                 // if we hit a new line with a delimiter, implying a new card, or the first character in our selection is a delimiter to qualify
                 // the case without the newline
@@ -75,12 +92,22 @@ const ExportCardFromText = async (editor: Editor, view: MarkdownView, plugin: Mo
                 const { name, content, updatedSelection } = getNextCardInfo(selection, delimiter);
                 selection = updatedSelection;
 
-                if (processCard(mochi, cards, name, content, deckId, template)) {
+                // Update progress indicator
+                loadingNotice.setMessage(`Processing ${cardCounter}/${totalCards} cards: "${name}"...`);
+
+                if (await processCard(mochi, cards, name, content, deckId, template)) {
                     modifiedCounter++;
+                }
+
+                // Add a small delay between card operations to avoid rate limiting
+                if (selection.includes(`\n${delimiter} `) || selection.trimStart().startsWith(delimiter)) {
+                    await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay between requests
                 }
             }
 
-            new Notice(`Modified/created ${modifiedCounter} out of ${cardCounter} cards`);
+            // Hide loading notice and show completion notice
+            loadingNotice.hide();
+            new Notice(`✅ Complete! Modified/created ${modifiedCounter} out of ${cardCounter} cards`);
         }).open();
     } catch (e) {
         new Notice(e);

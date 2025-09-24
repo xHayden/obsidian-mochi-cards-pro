@@ -10,10 +10,35 @@ export class MochiAPI {
 	constructor(apiKey: string) {
 		this.baseURL = "https://app.mochi.cards/api";
 		this.apiKey = apiKey;
-		this.headers = { 
+		this.headers = {
 			'Authorization': 'Basic ' + encode(this.apiKey + ":"),
 			'Content-Type': 'application/json'
 		};
+	}
+
+	private async sleep(ms: number): Promise<void> {
+		return new Promise(resolve => setTimeout(resolve, ms));
+	}
+
+	private async makeRequestWithRetry<T>(requestFn: () => Promise<T>, maxRetries = 3): Promise<T | undefined> {
+		for (let attempt = 1; attempt <= maxRetries; attempt++) {
+			try {
+				const result = await requestFn();
+				return result;
+			} catch (e: any) {
+				if (e?.status === 429 && attempt < maxRetries) {
+					const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff with max 5s
+					console.warn(`Rate limit hit, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`);
+					await this.sleep(delay);
+					continue;
+				}
+				console.error(e);
+				if (attempt === maxRetries) {
+					new Notice(`Failed to complete request after ${maxRetries} attempts`);
+				}
+			}
+		}
+		return undefined;
 	}
 
 	async getCards(deckId: string, bookmark: string | undefined = undefined, allCards: MochiCard[] = []): Promise<MochiCard[]> {
@@ -53,7 +78,7 @@ export class MochiAPI {
 			"deck-id": deckId,
 			"template-id": template.id,
 			"fields": {
-				"name": { 
+				"name": {
 					"id": "name",
 					"value": name
 				},
@@ -68,13 +93,13 @@ export class MochiAPI {
 			"id": firstFieldName,
 			"value": content
 		}
-		try {
+
+		await this.makeRequestWithRetry(async () => {
 			const res = await requestUrl({url: `${this.baseURL}/cards/${cardId}`, method: 'POST', headers: this.headers, body: JSON.stringify(card)})
 			const json = res.json;
 			console.log(`update card ${cardId}`, json);
-		} catch (e) {
-			console.error(e);
-		}
+			return res;
+		});
 	}
 
 	async createCard(name: string, content: string, deckId: string, template: MochiTemplate | undefined) {
@@ -87,7 +112,7 @@ export class MochiAPI {
 			"deck-id": deckId,
 			"template-id": template.id,
 			"fields": {
-				"name": { 
+				"name": {
 					"id": "name",
 					"value": name
 				},
@@ -102,13 +127,13 @@ export class MochiAPI {
 			"id": firstFieldName,
 			"value": content
 		}
-		try {
+
+		await this.makeRequestWithRetry(async () => {
 			const res: RequestUrlResponse = await requestUrl({ url: `${this.baseURL}/cards`, method: 'POST', headers: this.headers, body: JSON.stringify(card) });
 			const json = res.json;
 			console.log(`create card ${name}`, json);
-		} catch (e) {
-			console.error(e);
-		}	
+			return res;
+		});
 	}
 
 	async getDecks(): Promise<MochiDeck[]> {

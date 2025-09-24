@@ -61,9 +61,9 @@ export default class MochiPlugin extends Plugin {
 		const mochi = new MochiAPI(this.settings.mochiApiKey);
 		const templates = await mochi.getTemplates();
 		this.settings.templates = templates;
-		this.saveSettings();
+		await this.saveSettings();
 
-		this.addCommand({
+		let command = this.addCommand({
 			id: "select-template-mochi",
 			name: "Select Card Template",
 			editorCallback: (editor: Editor, view: MarkdownView) =>
